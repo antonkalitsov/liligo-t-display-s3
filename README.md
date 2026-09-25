@@ -33,8 +33,8 @@ If the upload can't find the board, hold BOOT, press RST, let go of BOOT and try
 
 **Web app**
 
-The remote is `index.html` in the root of this repo and is hosted with GitHub Pages at
-**https://antonkalitsov.github.io/liligo-t-display-s3/**
+The remote is `index.html` in the root of this repo. It's hosted with GitHub Pages here:
+[antonkalitsov.github.io/liligo-t-display-s3](https://antonkalitsov.github.io/liligo-t-display-s3/)
 
 Web Bluetooth only works over HTTPS, which GitHub Pages provides. On a laptop you can also just open the file directly in Chrome or Edge.
 
@@ -60,6 +60,7 @@ src/lgfx_config.h     display pin setup
 src/fonts/            fonts with Latin + Cyrillic characters
 tools/make_fonts.py   script that generates the fonts
 index.html            the Bluetooth remote (served by GitHub Pages)
+heart32.png           favicon for the web page
 ```
 
 ## Libraries
