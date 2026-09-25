@@ -107,7 +107,8 @@
     <div class="grid">
       <div class="full">
         <label>Text</label>
-        <input type="text" id="text" maxlength="120" placeholder="Your text">
+        <input type="text" id="text" maxlength="100" placeholder="Your text / Вашият текст">
+        <div class="hint" id="textWarn" style="color:var(--warn)"></div>
       </div>
       <div>
         <label>Animation</label>
@@ -161,6 +162,13 @@ let sel = 0;
 try { const s = JSON.parse(localStorage.getItem('ticker-state')); if (s && s.presets && s.presets.length) state = s; } catch (e) {}
 const persist = () => { try { localStorage.setItem('ticker-state', JSON.stringify(state)); } catch (e) {} };
 
+// ---------- text the board can show: ASCII, ° and Cyrillic
+const REPLACE = { '„': '"', '“': '"', '”': '"', '«': '"', '»': '"', '‘': "'", '’': "'", '–': '-', '—': '-', '…': '...', '\u00A0': ' ', '№': 'No' };
+const okChar = c => { const n = c.codePointAt(0); return (n >= 0x20 && n <= 0x7E) || n === 0xB0 || (n >= 0x400 && n <= 0x45F); };
+function cleanText(t) { return [...(t || '')].map(c => REPLACE[c] ?? c).filter(okChar).join(''); }
+function unsupported(t) { return [...new Set([...(t || '')].map(c => REPLACE[c] ?? c).filter(c => !okChar(c)))].join(' '); }
+const forBoard = p => ({ ...p, text: cleanText(p.text) });
+
 // ---------- list
 function renderList() {
   const list = $('list'); list.innerHTML = '';
@@ -184,7 +192,11 @@ const numeric = new Set(['font', 'size', 'speed', 'bright']);
 function loadEditor() {
   const p = state.presets[sel];
   fields.forEach(f => $(f).value = p[f]);
-  updateLabels(); startAnim();
+  updateLabels(); showTextWarn(); startAnim();
+}
+function showTextWarn() {
+  const bad = unsupported(state.presets[sel].text);
+  $('textWarn').textContent = bad ? 'The board can\'t show these and will skip them: ' + bad : '';
 }
 function updateLabels() {
   const p = state.presets[sel];
@@ -196,6 +208,7 @@ fields.forEach(f => $(f).addEventListener('input', () => {
   p[f] = numeric.has(f) ? +$(f).value : $(f).value;
   if (f === 'fg' || f === 'bg') p[f] = p[f].toUpperCase();
   updateLabels(); renderList(); persist();
+  if (f === 'text') showTextWarn();
   if (f === 'anim' || f === 'text') startAnim();
   livePreview();
 }));
@@ -236,7 +249,7 @@ function draw(now) {
   ctx.fillStyle = p.bg; ctx.fillRect(0, 0, W, H);
   ctx.font = `bold ${SIZE_PX[p.size - 1]}px ${FAMILY[p.font]}`;
   ctx.textBaseline = 'middle'; ctx.fillStyle = p.fg;
-  const text = p.text || '';
+  const text = cleanText(p.text);
   const tw = ctx.measureText(text).width, th = SIZE_PX[p.size - 1];
   const cy = H / 2, cx = (W - tw) / 2;
   const pps = 20 + p.speed * 25;
@@ -345,19 +358,19 @@ let previewTimer = null;
 function livePreview() {
   if (!dev || !dev.gatt.connected || !livePreviewOn) return;
   clearTimeout(previewTimer);
-  previewTimer = setTimeout(() => send({ cmd: 'preview', preset: state.presets[sel] }).catch(() => {}), 250);
+  previewTimer = setTimeout(() => send({ cmd: 'preview', preset: forBoard(state.presets[sel]) }).catch(() => {}), 250);
 }
 let livePreviewOn = false;
 $('btnPreview').onclick = async () => {
   livePreviewOn = true;
-  try { await send({ cmd: 'preview', preset: state.presets[sel] }); log('Showing on board (live while you edit). Upload to save it.'); }
+  try { await send({ cmd: 'preview', preset: forBoard(state.presets[sel]) }); log('Showing on board (live while you edit). Upload to save it.'); }
   catch (e) { log('Send failed: ' + e.message); }
 };
 $('btnUpload').onclick = async () => {
   try {
     log('Uploading…');
     const p = waitFor(m => m.cmd === 'set' || m.type === 'error');
-    await send({ cmd: 'set', autoOff: state.autoOff, flip: state.flip, cur: sel, presets: state.presets });
+    await send({ cmd: 'set', autoOff: state.autoOff, flip: state.flip, cur: sel, presets: state.presets.map(forBoard) });
     const r = await p;
     livePreviewOn = false;
     log(r.type === 'ok' ? `Saved ${state.presets.length} presets on the board ✓` : 'Board said: ' + r.msg);
