@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ticker Remote</title>
+<meta name="theme-color" content="#0f1115">
+<style>
+  :root {
+    --bg: #0f1115; --panel: #181b22; --panel2: #20242d; --line: #2c313c;
+    --text: #e8eaf0; --muted: #9098a8; --accent: #4f8cff; --ok: #3ecf8e; --warn: #ffb020; --bad: #ff5c5c;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 14px 16px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--bg); z-index: 5; }
+  header h1 { font-size: 17px; margin: 0; flex: 1; min-width: 120px; }
+  .pill { font-size: 12px; padding: 4px 10px; border-radius: 99px; background: var(--panel2); color: var(--muted); white-space: nowrap; }
+  .pill.on { background: rgba(62,207,142,.15); color: var(--ok); }
+  main { max-width: 980px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; grid-template-columns: 280px 1fr; }
+  @media (max-width: 760px) { main { grid-template-columns: 1fr; } main > section:last-child { order: -1; } }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--panel2); color: var(--text);
+    padding: 9px 14px; border-radius: 10px; cursor: pointer; }
+  button:hover { border-color: #3b4252; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button:disabled { opacity: .45; cursor: default; }
+  button.small { padding: 6px 10px; font-size: 13px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+  .item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px;
+    background: var(--panel2); border: 1px solid transparent; cursor: pointer; }
+  .item.sel { border-color: var(--accent); }
+  .swatch { width: 34px; height: 22px; border-radius: 5px; display: grid; place-items: center;
+    font-weight: 700; font-size: 12px; flex: none; border: 1px solid var(--line); }
+  .item .t { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .item .a { font-size: 12px; color: var(--muted); }
+  .item .n { font-size: 12px; color: var(--muted); width: 16px; }
+  canvas#pv { width: 100%; max-width: 480px; aspect-ratio: 320/170; display: block; border-radius: 8px;
+    border: 6px solid #050608; background: #000; margin: 0 auto 14px; image-rendering: pixelated; }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .grid .full { grid-column: 1 / -1; }
+  input[type=text], select { width: 100%; font: inherit; color: var(--text); background: var(--panel2);
+    border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  input[type=color] { width: 100%; height: 40px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel2); padding: 3px; }
+  .val { float: right; color: var(--text); }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .actions button { flex: 1; min-width: 140px; }
+  .banner { max-width: 980px; margin: 12px auto 0; padding: 12px 14px; border-radius: 10px;
+    background: rgba(255,176,32,.12); color: var(--warn); border: 1px solid rgba(255,176,32,.3); display: none; }
+  #log { font-size: 13px; color: var(--muted); min-height: 1.4em; margin-top: 10px; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .settings { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+  .check { display: flex; align-items: center; gap: 8px; color: var(--text); font-size: 14px; margin-top: 22px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Ticker Remote</h1>
+  <span id="bat" class="pill" hidden></span>
+  <span id="status" class="pill">Not connected</span>
+  <button id="btnConnect" class="primary">Connect</button>
+</header>
+
+<div id="noBt" class="banner">
+  This browser can't use Bluetooth. On Android and Windows/Mac use <b>Chrome</b> or <b>Edge</b>.
+  On iPhone, open this page in the free <b>Bluefy</b> browser app.
+</div>
+
+<main>
+  <section>
+    <h2>Presets</h2>
+    <div id="list" class="list"></div>
+    <div class="row">
+      <button class="small" id="btnAdd">+ Add</button>
+      <button class="small" id="btnDup">Duplicate</button>
+      <button class="small" id="btnUp">↑</button>
+      <button class="small" id="btnDown">↓</button>
+      <button class="small" id="btnDel">Delete</button>
+    </div>
+    <div class="settings">
+      <div>
+        <label>Auto power-off</label>
+        <select id="autoOff">
+          <option value="0">Never</option><option value="5">5 min</option><option value="15">15 min</option>
+          <option value="30">30 min</option><option value="60">1 hour</option><option value="120">2 hours</option>
+        </select>
+      </div>
+      <label class="check"><input type="checkbox" id="flip"> Flip screen</label>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button class="small" id="btnExport">Export file</button>
+      <button class="small" id="btnImport">Import file</button>
+      <input type="file" id="fileIn" accept=".json,application/json" hidden>
+    </div>
+    <p class="hint">Board buttons: <b>KEY</b> = next preset, hold = off. <b>BOOT</b> = Bluetooth on/off, hold = info.</p>
+  </section>
+
+  <section>
+    <h2>Preview</h2>
+    <canvas id="pv" width="320" height="170"></canvas>
+    <div class="grid">
+      <div class="full">
+        <label>Text</label>
+        <input type="text" id="text" maxlength="120" placeholder="Your text">
+      </div>
+      <div>
+        <label>Animation</label>
+        <select id="anim">
+          <option value="static">Static</option><option value="scroll">Scroll</option>
+          <option value="blink">Blink</option><option value="type">Typewriter</option>
+          <option value="bounce">Bounce</option><option value="rainbow">Rainbow</option>
+        </select>
+      </div>
+      <div>
+        <label>Font</label>
+        <select id="font"><option value="0">Sans</option><option value="1">Serif</option><option value="2">Mono</option></select>
+      </div>
+      <div><label>Text color</label><input type="color" id="fg"></div>
+      <div><label>Background</label><input type="color" id="bg"></div>
+      <div><label>Size <span class="val" id="sizeV"></span></label><input type="range" id="size" min="1" max="8"></div>
+      <div><label>Speed <span class="val" id="speedV"></span></label><input type="range" id="speed" min="1" max="10"></div>
+      <div><label>Brightness <span class="val" id="brightV"></span></label><input type="range" id="bright" min="1" max="16"></div>
+      <div id="dirWrap">
+        <label>Scroll direction</label>
+        <select id="dir"><option value="left">← Left</option><option value="right">Right →</option></select>
+      </div>
+    </div>
+    <div class="actions">
+      <button id="btnPreview" disabled>Show on board</button>
+      <button id="btnUpload" class="primary" disabled>Upload all to board</button>
+      <button id="btnRead" disabled>Read from board</button>
+    </div>
+    <div id="log"></div>
+  </section>
+</main>
+
+<script>
+const SVC = '6e5a1000-3d2a-4c6b-9b8e-5f1c2a7d9e01';
+const RX  = '6e5a1001-3d2a-4c6b-9b8e-5f1c2a7d9e01';
+const TX  = '6e5a1002-3d2a-4c6b-9b8e-5f1c2a7d9e01';
+const W = 320, H = 170;
+const $ = id => document.getElementById(id);
+
+// ---------- state
+const defaults = () => ({ text: 'Hello!', font: 0, size: 5, fg: '#FFFFFF', bg: '#000000', anim: 'scroll', speed: 5, bright: 12, dir: 'left' });
+let state = {
+  autoOff: 0, flip: false,
+  presets: [
+    { ...defaults(), text: 'Hello! :)', fg: '#00E5FF', size: 6 },
+    { ...defaults(), text: 'T-Display', anim: 'rainbow' },
+    { ...defaults(), text: 'Press BOOT for Bluetooth', anim: 'type', fg: '#FFD600', bg: '#0A1A40', size: 3, speed: 6 },
+  ]
+};
+let sel = 0;
+try { const s = JSON.parse(localStorage.getItem('ticker-state')); if (s && s.presets && s.presets.length) state = s; } catch (e) {}
+const persist = () => { try { localStorage.setItem('ticker-state', JSON.stringify(state)); } catch (e) {} };
+
+// ---------- list
+function renderList() {
+  const list = $('list'); list.innerHTML = '';
+  state.presets.forEach((p, i) => {
+    const d = document.createElement('div');
+    d.className = 'item' + (i === sel ? ' sel' : '');
+    d.innerHTML = `<span class="n">${i + 1}</span><span class="swatch" style="background:${p.bg};color:${p.fg}">Aa</span>
+      <span class="t"></span><span class="a">${p.anim}</span>`;
+    d.querySelector('.t').textContent = p.text || '(empty)';
+    d.onclick = () => { sel = i; renderList(); loadEditor(); };
+    list.appendChild(d);
+  });
+  $('btnDel').disabled = state.presets.length <= 1;
+  $('btnAdd').disabled = $('btnDup').disabled = state.presets.length >= 16;
+  $('autoOff').value = state.autoOff; $('flip').checked = !!state.flip;
+}
+
+// ---------- editor
+const fields = ['text', 'font', 'size', 'fg', 'bg', 'anim', 'speed', 'bright', 'dir'];
+const numeric = new Set(['font', 'size', 'speed', 'bright']);
+function loadEditor() {
+  const p = state.presets[sel];
+  fields.forEach(f => $(f).value = p[f]);
+  updateLabels(); startAnim();
+}
+function updateLabels() {
+  const p = state.presets[sel];
+  $('sizeV').textContent = p.size; $('speedV').textContent = p.speed; $('brightV').textContent = p.bright;
+  $('dirWrap').style.visibility = p.anim === 'scroll' ? 'visible' : 'hidden';
+}
+fields.forEach(f => $(f).addEventListener('input', () => {
+  const p = state.presets[sel];
+  p[f] = numeric.has(f) ? +$(f).value : $(f).value;
+  if (f === 'fg' || f === 'bg') p[f] = p[f].toUpperCase();
+  updateLabels(); renderList(); persist();
+  if (f === 'anim' || f === 'text') startAnim();
+  livePreview();
+}));
+$('autoOff').onchange = () => { state.autoOff = +$('autoOff').value; persist(); };
+$('flip').onchange = () => { state.flip = $('flip').checked; persist(); };
+
+$('btnAdd').onclick = () => { state.presets.push(defaults()); sel = state.presets.length - 1; renderList(); loadEditor(); persist(); };
+$('btnDup').onclick = () => { state.presets.splice(sel + 1, 0, { ...state.presets[sel] }); sel++; renderList(); loadEditor(); persist(); };
+$('btnDel').onclick = () => { if (state.presets.length <= 1) return; state.presets.splice(sel, 1); sel = Math.max(0, sel - 1); renderList(); loadEditor(); persist(); };
+$('btnUp').onclick = () => { if (sel > 0) { const a = state.presets; [a[sel - 1], a[sel]] = [a[sel], a[sel - 1]]; sel--; renderList(); persist(); } };
+$('btnDown').onclick = () => { const a = state.presets; if (sel < a.length - 1) { [a[sel + 1], a[sel]] = [a[sel], a[sel + 1]]; sel++; renderList(); persist(); } };
+
+$('btnExport').onclick = () => {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'ticker-presets.json'; a.click();
+};
+$('btnImport').onclick = () => $('fileIn').click();
+$('fileIn').onchange = async e => {
+  try {
+    const s = JSON.parse(await e.target.files[0].text());
+    if (!s.presets || !s.presets.length) throw 0;
+    state = { autoOff: s.autoOff || 0, flip: !!s.flip, presets: s.presets.slice(0, 16).map(p => ({ ...defaults(), ...p })) };
+    sel = 0; renderList(); loadEditor(); persist(); log('Imported ' + state.presets.length + ' presets');
+  } catch (err) { log('That file is not a preset file'); }
+  e.target.value = '';
+};
+
+// ---------- preview renderer (mirrors the firmware)
+const ctx = $('pv').getContext('2d');
+const SIZE_PX = [18, 24, 35, 47, 70, 94, 141, 188];
+const FAMILY = ['Arial, Helvetica, sans-serif', '"Times New Roman", Times, serif', '"Courier New", Courier, monospace'];
+let t0 = performance.now();
+function startAnim() { t0 = performance.now(); }
+function hue(h) { return `hsl(${h % 360},100%,50%)`; }
+
+function draw(now) {
+  const p = state.presets[sel]; const t = now - t0;
+  ctx.fillStyle = p.bg; ctx.fillRect(0, 0, W, H);
+  ctx.font = `bold ${SIZE_PX[p.size - 1]}px ${FAMILY[p.font]}`;
+  ctx.textBaseline = 'middle'; ctx.fillStyle = p.fg;
+  const text = p.text || '';
+  const tw = ctx.measureText(text).width, th = SIZE_PX[p.size - 1];
+  const cy = H / 2, cx = (W - tw) / 2;
+  const pps = 20 + p.speed * 25;
+  const tooWide = tw > W - 8;
+  let anim = p.anim;
+  if (tooWide && (anim === 'static' || anim === 'blink')) anim = 'scroll';
+  const scrollX = () => { const span = tw + W; const off = (t * pps / 1000) % span; return p.dir === 'right' ? off - tw : W - off; };
+
+  if (anim === 'static') ctx.fillText(text, cx, cy);
+  else if (anim === 'scroll') ctx.fillText(text, scrollX(), cy);
+  else if (anim === 'blink') { const per = 1100 - p.speed * 100; if (Math.floor(t / per) % 2 === 0) ctx.fillText(text, cx, cy); }
+  else if (anim === 'type') {
+    const cps = p.speed * 3, total = text.length + cps * 2;
+    let n = Math.floor(t * cps / 1000) % Math.max(total, 1); n = Math.min(n, text.length);
+    const part = text.slice(0, n), pw = ctx.measureText(part).width;
+    let x = tooWide ? 4 : cx; if (tooWide && pw > W - 16) x = W - 16 - pw;
+    ctx.fillText(part, x, cy);
+    if (Math.floor(t / 400) % 2 === 0) ctx.fillRect(x + pw + 2, cy - th / 3, Math.max(3, th / 8), th * 2 / 3);
+  }
+  else if (anim === 'bounce') {
+    const rx = Math.abs(W - tw), ry = Math.max(0, H - th), d = t * pps / 1000;
+    let px = rx ? d % (2 * rx) : 0; if (px > rx) px = 2 * rx - px;
+    let py = ry ? (d * 0.6) % (2 * ry) : 0; if (py > ry) py = 2 * ry - py;
+    ctx.fillText(text, tw <= W ? px : -px, th / 2 + py);
+  }
+  else if (anim === 'rainbow') {
+    let x = tooWide ? W - (t * pps / 1000) % (tw + W) : cx;
+    const h0 = t * p.speed * 30 / 1000;
+    [...text].forEach((ch, i) => { ctx.fillStyle = hue(h0 + i * 25); ctx.fillText(ch, x, cy); x += ctx.measureText(ch).width; });
+  }
+  // approximate the brightness setting
+  ctx.fillStyle = `rgba(0,0,0,${(16 - p.bright) / 16 * 0.7})`; ctx.fillRect(0, 0, W, H);
+  requestAnimationFrame(draw);
+}
+
+// ---------- Bluetooth
+let dev = null, rxChar = null, rxBuf = '', waiters = [], sendChain = Promise.resolve();
+const enc = new TextEncoder(), dec = new TextDecoder();
+const log = m => $('log').textContent = m;
+
+function setConnected(on) {
+  $('status').textContent = on ? 'Connected: ' + dev.name : 'Not connected';
+  $('status').classList.toggle('on', on);
+  $('btnConnect').textContent = on ? 'Disconnect' : 'Connect';
+  ['btnPreview', 'btnUpload', 'btnRead'].forEach(b => $(b).disabled = !on);
+  if (!on) $('bat').hidden = true;
+}
+
+function onNotify(e) {
+  rxBuf += dec.decode(e.target.value);
+  let i;
+  while ((i = rxBuf.indexOf('\n')) >= 0) {
+    const line = rxBuf.slice(0, i); rxBuf = rxBuf.slice(i + 1);
+    let msg; try { msg = JSON.parse(line); } catch (_) { continue; }
+    if (msg.type === 'status') {
+      $('bat').hidden = false;
+      $('bat').textContent = msg.usb ? 'USB power' : `Battery ${msg.bat_pct}%`;
+    }
+    waiters = waiters.filter(w => { if (w.match(msg)) { w.resolve(msg); return false; } return true; });
+  }
+}
+
+function waitFor(match, ms = 6000) {
+  return new Promise((resolve, reject) => {
+    const w = { match, resolve };
+    waiters.push(w);
+    setTimeout(() => { waiters = waiters.filter(x => x !== w); reject(new Error('No reply from board')); }, ms);
+  });
+}
+
+function send(obj) {
+  const data = enc.encode(JSON.stringify(obj) + '\n');
+  sendChain = sendChain.then(async () => {
+    for (let i = 0; i < data.length; i += 160) {
+      const chunk = data.slice(i, i + 160);
+      if (rxChar.writeValueWithResponse) await rxChar.writeValueWithResponse(chunk);
+      else await rxChar.writeValue(chunk);
+    }
+  });
+  return sendChain;
+}
+
+async function connect() {
+  try {
+    dev = await navigator.bluetooth.requestDevice({ filters: [{ services: [SVC] }, { namePrefix: 'TDisplay' }], optionalServices: [SVC] });
+    dev.addEventListener('gattserverdisconnected', () => { setConnected(false); log('Disconnected'); });
+    log('Connecting…');
+    const server = await dev.gatt.connect();
+    const svc = await server.getPrimaryService(SVC);
+    rxChar = await svc.getCharacteristic(RX);
+    const tx = await svc.getCharacteristic(TX);
+    await tx.startNotifications();
+    tx.addEventListener('characteristicvaluechanged', onNotify);
+    setConnected(true); log('Connected');
+    send({ cmd: 'status' });
+  } catch (e) {
+    log(e.name === 'NotFoundError' ? 'No board picked. Press BOOT on the board so the blue BT badge shows, then try again.' : 'Could not connect: ' + e.message);
+  }
+}
+
+$('btnConnect').onclick = () => {
+  if (dev && dev.gatt.connected) dev.gatt.disconnect(); else connect();
+};
+
+let previewTimer = null;
+function livePreview() {
+  if (!dev || !dev.gatt.connected || !livePreviewOn) return;
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(() => send({ cmd: 'preview', preset: state.presets[sel] }).catch(() => {}), 250);
+}
+let livePreviewOn = false;
+$('btnPreview').onclick = async () => {
+  livePreviewOn = true;
+  try { await send({ cmd: 'preview', preset: state.presets[sel] }); log('Showing on board (live while you edit). Upload to save it.'); }
+  catch (e) { log('Send failed: ' + e.message); }
+};
+$('btnUpload').onclick = async () => {
+  try {
+    log('Uploading…');
+    const p = waitFor(m => m.cmd === 'set' || m.type === 'error');
+    await send({ cmd: 'set', autoOff: state.autoOff, flip: state.flip, cur: sel, presets: state.presets });
+    const r = await p;
+    livePreviewOn = false;
+    log(r.type === 'ok' ? `Saved ${state.presets.length} presets on the board ✓` : 'Board said: ' + r.msg);
+  } catch (e) { log('Upload failed: ' + e.message); }
+};
+$('btnRead').onclick = async () => {
+  try {
+    const p = waitFor(m => m.type === 'config');
+    await send({ cmd: 'get' });
+    const c = await p;
+    state = { autoOff: c.autoOff || 0, flip: !!c.flip, presets: c.presets.map(x => ({ ...defaults(), ...x })) };
+    sel = Math.min(c.cur || 0, state.presets.length - 1);
+    renderList(); loadEditor(); persist(); log('Loaded ' + state.presets.length + ' presets from the board');
+  } catch (e) { log('Read failed: ' + e.message); }
+};
+
+// ---------- boot
+if (!navigator.bluetooth) { $('noBt').style.display = 'block'; $('btnConnect').disabled = true; }
+renderList(); loadEditor(); requestAnimationFrame(draw);
+</script>
+</body>
+</html>
